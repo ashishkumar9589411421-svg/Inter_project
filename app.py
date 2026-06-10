@@ -253,7 +253,7 @@ CREATE TABLE IF NOT EXISTS coupons (
     discount_value REAL NOT NULL,
     min_order REAL DEFAULT 0, max_discount REAL,
     usage_limit INTEGER DEFAULT 100, used_count INTEGER DEFAULT 0,
-    is_active INTEGER DEFAULT 1,
+    is_active INTEGER DEFAULT 1, 
     expires_at TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -472,6 +472,26 @@ CREATE TABLE IF NOT EXISTS whatsapp_logs (
     status TEXT DEFAULT 'sent',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS ticket_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id INTEGER NOT NULL,
+    sender_type TEXT NOT NULL CHECK(sender_type IN ('user','admin')),
+    sender_id INTEGER NOT NULL,
+    message TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(ticket_id) REFERENCES support_tickets(id)
+);
+CREATE TABLE IF NOT EXISTS luxe_club_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER UNIQUE NOT NULL,
+    payment_id TEXT,
+    razorpay_order_id TEXT,
+    amount REAL DEFAULT 499,
+    is_active INTEGER DEFAULT 1,
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TEXT,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_slug ON products(slug);
 CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active);
@@ -483,6 +503,7 @@ CREATE INDEX IF NOT EXISTS idx_reviews_product ON reviews(product_id);
 CREATE INDEX IF NOT EXISTS idx_variants_product ON product_variants(product_id);
 CREATE INDEX IF NOT EXISTS idx_users_mobile ON users(mobile_number);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_ticket_messages ON ticket_messages(ticket_id);
 """
 
 def slugify(text):
@@ -1076,7 +1097,7 @@ def add_wishlist(user):
     try:
         db.execute("INSERT INTO wishlist (user_id, product_id) VALUES (?,?)", (user['id'], pid))
         db.commit()
-    except sqlite3.IntegrityError:
+    except Exception:
         pass
     return jsonify({'message': 'Added to wishlist'})
 
@@ -1534,6 +1555,145 @@ def get_blog_post(slug):
 def get_banners():
     return jsonify(dict_rows(get_db().execute("SELECT * FROM banners WHERE is_active=1 ORDER BY sort_order").fetchall()))
 
+# ─── PUBLIC STATS ────────────────────────────────────────────────────────────
+@app.route('/api/stats', methods=['GET'])
+def get_public_stats():
+    db = get_db()
+    customers = db.execute("SELECT COUNT(*) as v FROM users WHERE role='customer'").fetchone()['v']
+    products = db.execute("SELECT COUNT(*) as v FROM products WHERE is_active=1").fetchone()['v']
+    brands = db.execute("SELECT COUNT(DISTINCT brand) as v FROM products WHERE is_active=1 AND brand IS NOT NULL AND brand != ''").fetchone()['v']
+    avg_rating_row = db.execute("SELECT AVG(rating) as v FROM reviews WHERE is_approved=1").fetchone()
+    avg_rating = round(avg_rating_row['v'], 1) if avg_rating_row['v'] else 4.8
+    orders_delivered = db.execute("SELECT COUNT(*) as v FROM orders WHERE status='DELIVERED'").fetchone()['v']
+    return jsonify({
+        'happy_customers': max(customers, orders_delivered),
+        'total_products': products,
+        'total_brands': max(brands, 1),
+        'avg_rating': avg_rating
+    })
+
+# ─── ORDER TRACKING ──────────────────────────────────────────────────────────
+@app.route('/api/orders/<order_num>/tracking', methods=['GET'])
+@token_required
+def get_order_tracking(user, order_num):
+    db = get_db()
+    order = db.execute("SELECT id, user_id FROM orders WHERE order_number=?", (order_num,)).fetchone()
+    if not order: return jsonify({'error': 'Order not found'}), 404
+    if order['user_id'] != user['id'] and user['role'] != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    tracking = dict_rows(db.execute("SELECT * FROM order_tracking WHERE order_id=? ORDER BY created_at ASC", (order['id'],)).fetchall())
+    return jsonify(tracking)
+
+# ─── SUPPORT TICKET CHAT ────────────────────────────────────────────────────
+@app.route('/api/support/<int:tid>/messages', methods=['GET'])
+@token_required
+def get_ticket_messages(user, tid):
+    db = get_db()
+    ticket = db.execute("SELECT * FROM support_tickets WHERE id=? AND user_id=?", (tid, user['id'])).fetchone()
+    if not ticket: return jsonify({'error': 'Ticket not found'}), 404
+    messages = dict_rows(db.execute("SELECT tm.*, CASE WHEN tm.sender_type='admin' THEN 'LUXE Support' ELSE u.name END as sender_name FROM ticket_messages tm LEFT JOIN users u ON tm.sender_id=u.id WHERE tm.ticket_id=? ORDER BY tm.created_at ASC", (tid,)).fetchall())
+    return jsonify({'ticket': dict_row(ticket), 'messages': messages})
+
+@app.route('/api/support/<int:tid>/messages', methods=['POST'])
+@token_required
+def send_ticket_message(user, tid):
+    d = request.json or {}
+    msg = sanitize(d.get('message', ''))
+    if not msg: return jsonify({'error': 'Message required'}), 400
+    db = get_db()
+    ticket = db.execute("SELECT * FROM support_tickets WHERE id=? AND user_id=?", (tid, user['id'])).fetchone()
+    if not ticket: return jsonify({'error': 'Ticket not found'}), 404
+    db.execute("INSERT INTO ticket_messages (ticket_id, sender_type, sender_id, message) VALUES (?,?,?,?)",
+               (tid, 'user', user['id'], msg))
+    if ticket['status'] == 'resolved' or ticket['status'] == 'closed':
+        db.execute("UPDATE support_tickets SET status='open' WHERE id=?", (tid,))
+    db.commit()
+    return jsonify({'message': 'Message sent'}), 201
+
+@app.route('/api/admin/tickets/<int:tid>/messages', methods=['POST'])
+@admin_required
+def admin_send_ticket_message(admin, tid):
+    d = request.json or {}
+    msg = sanitize(d.get('message', ''))
+    if not msg: return jsonify({'error': 'Message required'}), 400
+    db = get_db()
+    db.execute("INSERT INTO ticket_messages (ticket_id, sender_type, sender_id, message) VALUES (?,?,?,?)",
+               (tid, 'admin', admin['id'], msg))
+    ticket = db.execute("SELECT user_id, subject FROM support_tickets WHERE id=?", (tid,)).fetchone()
+    if ticket:
+        notify(ticket['user_id'], 'New Reply on Support Ticket', f'Your ticket "{ticket["subject"]}" has a new reply.', 'support')
+    db.commit()
+    return jsonify({'message': 'Reply sent'}), 201
+
+@app.route('/api/admin/tickets/<int:tid>/messages', methods=['GET'])
+@admin_required
+def admin_get_ticket_messages(admin, tid):
+    db = get_db()
+    messages = dict_rows(db.execute("SELECT tm.*, CASE WHEN tm.sender_type='admin' THEN 'LUXE Support' ELSE u.name END as sender_name FROM ticket_messages tm LEFT JOIN users u ON tm.sender_id=u.id WHERE tm.ticket_id=? ORDER BY tm.created_at ASC", (tid,)).fetchall())
+    ticket = dict_row(db.execute("SELECT st.*, u.name as customer_name FROM support_tickets st JOIN users u ON st.user_id=u.id WHERE st.id=?", (tid,)).fetchone())
+    return jsonify({'ticket': ticket, 'messages': messages})
+
+# ─── LUXE CLUB MEMBERSHIP ───────────────────────────────────────────────────
+@app.route('/api/luxe-club/status', methods=['GET'])
+@token_required
+def luxe_club_status(user):
+    db = get_db()
+    member = dict_row(db.execute("SELECT * FROM luxe_club_members WHERE user_id=? AND is_active=1", (user['id'],)).fetchone())
+    return jsonify({'is_member': bool(member), 'membership': member})
+
+@app.route('/api/luxe-club/join', methods=['POST'])
+@token_required
+def luxe_club_join(user):
+    db = get_db()
+    existing = db.execute("SELECT id FROM luxe_club_members WHERE user_id=? AND is_active=1", (user['id'],)).fetchone()
+    if existing: return jsonify({'error': 'Already a LUXE Club member'}), 400
+    if not razorpay_client: return jsonify({'error': 'Payment not configured'}), 500
+    try:
+        rz_order = razorpay_client.order.create({
+            'amount': 49900, 'currency': 'INR',
+            'receipt': 'LUXECLUB' + secrets.token_hex(4).upper(),
+            'notes': {'user_id': str(user['id']), 'type': 'luxe_club'}
+        })
+        return jsonify({'order_id': rz_order['id'], 'amount': 49900, 'currency': 'INR', 'key_id': RAZORPAY_KEY_ID})
+    except Exception as e:
+        return jsonify({'error': f'Payment error: {str(e)}'}), 500
+
+@app.route('/api/luxe-club/verify', methods=['POST'])
+@token_required
+def luxe_club_verify(user):
+    d = request.json or {}
+    rz_payment_id = d.get('razorpay_payment_id', '')
+    rz_order_id = d.get('razorpay_order_id', '')
+    rz_signature = d.get('razorpay_signature', '')
+    if not rz_payment_id or not rz_order_id:
+        return jsonify({'error': 'Missing payment details'}), 400
+    msg = f"{rz_order_id}|{rz_payment_id}"
+    generated_sig = hmac.HMAC(RAZORPAY_KEY_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()
+    if generated_sig != rz_signature:
+        try:
+            razorpay_client.utility.verify_payment_signature({
+                'razorpay_order_id': rz_order_id, 'razorpay_payment_id': rz_payment_id, 'razorpay_signature': rz_signature
+            })
+        except:
+            return jsonify({'error': 'Payment verification failed'}), 400
+    db = get_db()
+    expires = (datetime.datetime.now() + datetime.timedelta(days=365)).isoformat()
+    try:
+        db.execute("INSERT INTO luxe_club_members (user_id, payment_id, razorpay_order_id, amount, expires_at) VALUES (?,?,?,?,?)",
+                   (user['id'], rz_payment_id, rz_order_id, 499, expires))
+    except Exception:
+        db.execute("UPDATE luxe_club_members SET is_active=1, payment_id=?, razorpay_order_id=?, expires_at=? WHERE user_id=?",
+                   (rz_payment_id, rz_order_id, expires, user['id']))
+    # Give a welcome coupon
+    try:
+        club_code = 'LUXECLUB' + secrets.token_hex(2).upper()
+        db.execute("INSERT INTO coupons (code,discount_type,discount_value,min_order,max_discount,usage_limit,expires_at) VALUES (?,?,?,?,?,?,?)",
+                   (club_code, 'percentage', 15, 999, 1000, 1, expires))
+    except Exception: pass
+    notify(user['id'], 'Welcome to LUXE Club! 🎉', 'You are now a LUXE Club member. Enjoy exclusive deals and 15% off!', 'reward')
+    db.commit()
+    return jsonify({'message': 'Welcome to LUXE Club!', 'is_member': True})
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ─── ADMIN APIs ──────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1694,6 +1854,11 @@ def admin_update_order_status(admin, oid):
     order = db.execute("SELECT * FROM orders WHERE id=?", (oid,)).fetchone()
     if not order: return jsonify({'error': 'Order not found'}), 404
     db.execute("UPDATE orders SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (new_status, oid))
+    # Auto-create tracking entry
+    tracking_notes = d.get('notes', '')
+    tracking_location = d.get('location', '')
+    db.execute("INSERT INTO order_tracking (order_id, status, location, notes) VALUES (?,?,?,?)",
+               (oid, new_status, tracking_location, tracking_notes or f'Order status updated to {new_status}'))
     notify(order['user_id'], f'Order {new_status.replace("_"," ").title()}',
            f'Your order {order["order_number"]} is now {new_status.replace("_"," ").lower()}.', 'order')
     if new_status in ('RETURNED','REFUNDED'):
@@ -1763,8 +1928,31 @@ def admin_add_coupon(admin):
         (d['code'].upper(), d.get('discount_type','percentage'), float(d['discount_value']),
          float(d.get('min_order',0)), float(d.get('max_discount',0)) or None,
          int(d.get('usage_limit',100)), d.get('expires_at')))
+    log_audit(admin['id'], 'coupon_created', d['code'].upper(), json.dumps(d))
     db.commit()
     return jsonify({'message': 'Coupon created'}), 201
+
+@app.route('/api/admin/coupons/<int:cid>', methods=['PUT'])
+@admin_required
+def admin_update_coupon(admin, cid):
+    d = request.json or {}
+    db = get_db()
+    fields = {k: d[k] for k in ['code','discount_type','discount_value','min_order','max_discount','usage_limit','is_active','expires_at'] if k in d}
+    if fields:
+        sets = ', '.join(f"{k}=?" for k in fields)
+        db.execute(f"UPDATE coupons SET {sets} WHERE id=?", list(fields.values()) + [cid])
+    log_audit(admin['id'], 'coupon_updated', str(cid), json.dumps(d))
+    db.commit()
+    return jsonify({'message': 'Coupon updated'})
+
+@app.route('/api/admin/coupons/<int:cid>', methods=['DELETE'])
+@admin_required
+def admin_delete_coupon(admin, cid):
+    db = get_db()
+    db.execute("DELETE FROM coupons WHERE id=?", (cid,))
+    log_audit(admin['id'], 'coupon_deleted', str(cid), '')
+    db.commit()
+    return jsonify({'message': 'Coupon deleted'})
 
 @app.route('/api/admin/banners', methods=['GET','POST'])
 @admin_required
@@ -1981,7 +2169,7 @@ def newsletter_subscribe():
         db.execute("INSERT INTO newsletter_subscribers (email) VALUES (?)", (email,))
         db.commit()
         return jsonify({'message': 'Successfully subscribed to the newsletter!'})
-    except sqlite3.IntegrityError:
+    except Exception:
         return jsonify({'error': 'Email is already subscribed'}), 400
 
 @app.route('/api/razorpay/refund', methods=['POST'])

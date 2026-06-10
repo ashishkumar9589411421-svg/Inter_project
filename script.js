@@ -193,15 +193,22 @@ const routes = {
 };
 
 function router() {
-    let hash = location.hash.replace('#', '').split('/')[0] || 'home';
-    const param = location.hash.split('/')[1] || '';
+    let rawHash = location.hash.replace('#', '');
+    let hashPath = rawHash.split('?')[0];
+    let hash = hashPath.split('/')[0] || 'home';
+    const param = hashPath.split('/')[1] || '';
     updateNav();
-    if (hash === 'product') { renderProductDetail(param); return; }
-    if (hash === 'order') { renderOrderDetail(param); return; }
-    if (hash.startsWith('admin-') && hash !== 'admin-login') { renderAdmin(hash.replace('admin-','')); return; }
-    if (routes[hash]) routes[hash]();
-    else renderHome();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (hash === 'product') { renderProductDetail(param); }
+    else if (hash === 'order') { renderOrderDetail(param); }
+    else if (hash.startsWith('admin-') && hash !== 'admin-login') { renderAdmin(hash.replace('admin-','')); }
+    else if (routes[hash]) { routes[hash](); }
+    else { renderHome(); }
+    
+    // Ensure animations fire on page change
+    setTimeout(() => {
+        initScrollReveal();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 150);
 }
 window.addEventListener('hashchange', router);
 
@@ -225,8 +232,9 @@ function productCard(p) {
         <div class="card-img">
             ${discount > 0 ? `<span class="product-badge badge-sale">${discount}% OFF</span>` : ''}
             ${p.is_featured ? `<span class="product-badge badge-new" style="left:auto;right:12px">Featured</span>` : ''}
-            <img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy">
+            <img src="${esc(p.image_url||'https://images.unsplash.com/photo-1445205170230-053b83016050?w=600')}" onerror="this.src='https://images.unsplash.com/photo-1445205170230-053b83016050?w=600'" alt="${esc(p.name)}" loading="lazy">
             <div class="card-actions">
+                ${isAdmin() ? `<button class="action-btn" onclick="event.stopPropagation();editProduct(${p.id})" title="Edit Product" style="background:var(--accent);color:#fff"><i class="fas fa-edit"></i></button>` : ''}
                 <button class="action-btn" onclick="event.stopPropagation();addToWishlist(${p.id})" title="Wishlist"><i class="fas fa-heart"></i></button>
                 <button class="action-btn" onclick="event.stopPropagation();quickAdd(${p.id})" title="Add to Cart"><i class="fas fa-shopping-bag"></i></button>
                 <button class="action-btn" onclick="event.stopPropagation();navigate('product/${esc(p.slug)}')" title="Quick View"><i class="fas fa-eye"></i></button>
@@ -265,17 +273,24 @@ async function renderHome() {
         <span>⚡ SALE LIVE — Up to 50% Off</span><span>🚚 Free Shipping Over ₹999</span><span>🎁 Use Code WELCOME10</span><span>💎 Premium Quality Guaranteed</span><span>🔒 Secure Razorpay Payments</span><span>↩️ Easy 7-Day Returns</span>
     </div></div>
 
-    <!-- Hero -->
-    <div class="hero" id="hero-section">
-        <div class="hero-bg"></div>
-        <div class="hero-content">
-            <h1 class="gsap-fade">ELEVATE YOUR <span class="accent">STYLE</span></h1>
-            <p class="gsap-fade">Discover curated luxury fashion collections. Handpicked for the modern individual who demands excellence.</p>
-            <div class="hero-actions gsap-fade">
-                <a href="#shop" class="btn btn-primary btn-lg">Shop Now <i class="fas fa-arrow-right"></i></a>
-                <a href="#shop" class="btn btn-outline btn-lg">New Arrivals</a>
+    <!-- Hero Slider -->
+    <div class="hero-slider" id="hero-slider">
+        <div class="slider-track" id="slider-track">
+            <!-- Default Slide while loading -->
+            <div class="slide">
+                <div class="slide-bg" style="background-image:url('https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=1600&q=80')"></div>
+                <div class="slide-content">
+                    <h1 class="slide-title gsap-fade">ELEVATE YOUR <span class="accent">STYLE</span></h1>
+                    <p class="slide-subtitle gsap-fade">Discover curated luxury fashion collections. Handpicked for the modern individual.</p>
+                    <div class="hero-actions gsap-fade">
+                        <a href="#shop" class="btn btn-primary btn-lg">Shop Now <i class="fas fa-arrow-right"></i></a>
+                    </div>
+                </div>
             </div>
         </div>
+        <button class="slider-btn prev" onclick="moveHeroSlider(-1)" aria-label="Previous"><i class="fas fa-chevron-left"></i></button>
+        <button class="slider-btn next" onclick="moveHeroSlider(1)" aria-label="Next"><i class="fas fa-chevron-right"></i></button>
+        <div class="slider-dots" id="slider-dots"></div>
         <div class="hero-scroll"><i class="fas fa-chevron-down"></i></div>
     </div>
 
@@ -302,10 +317,10 @@ async function renderHome() {
         <!-- Counter Stats -->
         <div class="counter-section reveal">
             <div class="counter-grid">
-                <div class="counter-item"><div class="counter-num" data-target="5000" data-suffix="+">0</div><div class="counter-label">Happy Customers</div></div>
-                <div class="counter-item"><div class="counter-num" data-target="500" data-suffix="+">0</div><div class="counter-label">Products</div></div>
-                <div class="counter-item"><div class="counter-num" data-target="50" data-suffix="+">0</div><div class="counter-label">Brands</div></div>
-                <div class="counter-item"><div class="counter-num" data-target="4" data-suffix=".8★">0</div><div class="counter-label">Avg Rating</div></div>
+                <div class="counter-item"><div class="counter-num" id="stat-customers" data-target="0" data-suffix="+">0</div><div class="counter-label">Happy Customers</div></div>
+                <div class="counter-item"><div class="counter-num" id="stat-products" data-target="0" data-suffix="+">0</div><div class="counter-label">Products</div></div>
+                <div class="counter-item"><div class="counter-num" id="stat-brands" data-target="0" data-suffix="+">0</div><div class="counter-label">Brands</div></div>
+                <div class="counter-item"><div class="counter-num" id="stat-rating" data-target="0" data-suffix="★">0</div><div class="counter-label">Avg Rating</div></div>
             </div>
         </div>
 
@@ -322,13 +337,30 @@ async function renderHome() {
     </div>
 
     <!-- Newsletter -->
-    <div class="newsletter-section">
-        <h2>Join the LUXE Club</h2>
-        <p>Subscribe for exclusive deals, early access & style tips</p>
-        <form class="newsletter-form" onsubmit="event.preventDefault();toast('Subscribed! Welcome to LUXE Club 🎉','success');this.reset();">
-            <input type="email" placeholder="Enter your email address" required>
-            <button type="submit">Subscribe</button>
-        </form>
+    <div class="newsletter-section" style="padding:4rem 2rem;text-align:center;background:var(--primary);color:#fff;">
+        <h2 style="font-family:var(--font-heading);font-size:2.5rem;margin-bottom:0.5rem;color:var(--accent);">Join the LUXE Club</h2>
+        <p style="color:rgba(255,255,255,0.8);max-width:600px;margin:0 auto 3rem auto;">Choose your membership level and unlock a world of exclusive fashion, early access, and style tips.</p>
+        <div style="display:flex;justify-content:center;gap:2rem;flex-wrap:wrap;max-width:1000px;margin:0 auto;">
+            <!-- Standard Free -->
+            <div style="background:rgba(255,255,255,0.05);padding:2rem;border-radius:var(--radius-lg);flex:1;min-width:300px;border:1px solid rgba(255,255,255,0.1);text-align:left;">
+                <h3 style="color:#fff;font-size:1.5rem;margin-bottom:0.5rem;">Standard Access</h3>
+                <p style="font-size:0.9rem;color:rgba(255,255,255,0.6);margin-bottom:1.5rem;height:60px;">Stay in the loop with our weekly newsletter, product launches, and general style tips.</p>
+                <h4 style="font-size:2rem;margin-bottom:1.5rem;color:#fff;">Free</h4>
+                <form class="newsletter-form" onsubmit="event.preventDefault();toast('Subscribed! Welcome to LUXE Club 🎉','success');this.reset();" style="display:flex;flex-direction:column;gap:1rem;">
+                    <input type="email" placeholder="Enter your email address" required style="width:100%;padding:1rem;border-radius:var(--radius-sm);border:none;background:rgba(255,255,255,0.1);color:#fff;">
+                    <button type="submit" class="btn" style="background:rgba(255,255,255,0.2);color:#fff;width:100%">Subscribe Free</button>
+                </form>
+            </div>
+            <!-- Premium VIP -->
+            <div style="background:linear-gradient(135deg, var(--accent) 0%, #a48135 100%);padding:2rem;border-radius:var(--radius-lg);flex:1;min-width:300px;box-shadow:0 10px 30px rgba(201,168,76,0.3);position:relative;overflow:hidden;text-align:left;">
+                <div style="position:absolute;top:20px;right:-35px;background:#fff;color:var(--accent);font-size:0.8rem;font-weight:bold;padding:5px 40px;transform:rotate(45deg);box-shadow:0 2px 10px rgba(0,0,0,0.2);">VIP</div>
+                <h3 style="color:#fff;font-size:1.5rem;margin-bottom:0.5rem;"><i class="fas fa-crown"></i> Premium Member</h3>
+                <p style="font-size:0.9rem;color:rgba(255,255,255,0.9);margin-bottom:1.5rem;height:60px;">Get Free Shipping, 10% extra discount on all orders, VIP priority support, and more.</p>
+                <h4 style="font-size:2rem;margin-bottom:1.5rem;color:#fff;">₹499 <span style="font-size:1rem;font-weight:400;opacity:0.8">/ year</span></h4>
+                <button class="btn pulse" onclick="joinLuxeClub()" style="background:#fff;color:var(--accent);width:100%;font-weight:bold;font-size:1.1rem;padding:1rem;">Upgrade to Premium</button>
+                <p style="font-size:0.75rem;margin-top:1rem;color:rgba(255,255,255,0.8);text-align:center;"><i class="fas fa-lock"></i> Secure Payment by Razorpay</p>
+            </div>
+        </div>
     </div>
 
     <!-- Payment Trust -->
@@ -339,8 +371,8 @@ async function renderHome() {
         </div>
     </div>`;
 
-    // Particles
-    createParticles($('#hero-section'), 25);
+    // Particles - Optional for slider
+    createParticles($('#hero-slider'), 25);
     // GSAP hero animation
     if (typeof gsap !== 'undefined') {
         gsap.from('.gsap-fade', { y: 50, opacity: 0, duration: 1, stagger: 0.25, ease: 'power3.out' });
@@ -356,8 +388,37 @@ async function renderHome() {
 
     // Load data
     try {
+        const stats = await api('/stats');
+        $('#stat-customers').dataset.target = stats.happy_customers || 0;
+        $('#stat-products').dataset.target = stats.total_products || 0;
+        $('#stat-brands').dataset.target = stats.total_brands || 0;
+        $('#stat-rating').dataset.target = stats.avg_rating || 0;
+
+        try {
+            const banners = await api('/banners');
+            if (banners && banners.length > 0) {
+                let trackHtml = '';
+                let dotsHtml = '';
+                banners.forEach((b, i) => {
+                    trackHtml += \`
+                    <div class="slide">
+                        <div class="slide-bg" style="background-image:url('\${esc(b.image_url)}')"></div>
+                        <div class="slide-content">
+                            \${b.title ? \`<h1 class="slide-title">\${esc(b.title)}</h1>\` : ''}
+                            \${b.subtitle ? \`<p class="slide-subtitle">\${esc(b.subtitle)}</p>\` : ''}
+                            \${b.link_url ? \`<a href="\${esc(b.link_url)}" class="btn btn-primary btn-lg">\${esc(b.button_text || 'Shop Now')}</a>\` : ''}
+                        </div>
+                    </div>\`;
+                    dotsHtml += \`<div class="dot \${i===0?'active':''}" onclick="goToHeroSlide(\${i})"></div>\`;
+                });
+                $('#slider-track').innerHTML = trackHtml;
+                $('#slider-dots').innerHTML = dotsHtml;
+                initHeroSlider(banners.length);
+            }
+        } catch(e) { console.warn('Banners load failed', e); }
+
         const cats = await api('/categories');
-        $('#home-cats').innerHTML = cats.map(c => `<div class="category-card reveal-scale" onclick="navigate('shop?category=${c.slug}')"><img src="${esc(c.image_url)}" alt="${esc(c.name)}" loading="lazy"><h3>${esc(c.name)}</h3></div>`).join('');
+        $('#home-cats').innerHTML = cats.map(c => `<div class="category-card reveal-scale" onclick="navigate('shop?category=${c.slug}')"><img src="${esc(c.image_url||'https://images.unsplash.com/photo-1445205170230-053b83016050?w=600')}" onerror="this.src='https://images.unsplash.com/photo-1445205170230-053b83016050?w=600'" alt="${esc(c.name)}" loading="lazy"><h3>${esc(c.name)}</h3></div>`).join('');
         const { products } = await api('/products?sort=popular&per_page=4');
         $('#home-featured').innerHTML = `<div class="product-grid">${products.map(productCard).join('')}</div>`;
         const { products: newP } = await api('/products?sort=newest&per_page=4');
@@ -367,6 +428,89 @@ async function renderHome() {
         initScrollReveal();
     } catch(e) { console.error(e); }
 }
+
+// ─── HERO SLIDER LOGIC ─────────────────────────────────────────────────────
+let heroSlideIndex = 0;
+let heroSlideInterval;
+let heroSlideCount = 1;
+
+function initHeroSlider(count) {
+    heroSlideCount = count;
+    heroSlideIndex = 0;
+    updateHeroSlider();
+    startHeroSlider();
+}
+
+function startHeroSlider() {
+    clearInterval(heroSlideInterval);
+    heroSlideInterval = setInterval(() => { moveHeroSlider(1); }, 5000);
+}
+
+window.moveHeroSlider = (step) => {
+    heroSlideIndex = (heroSlideIndex + step + heroSlideCount) % heroSlideCount;
+    updateHeroSlider();
+    startHeroSlider();
+};
+
+window.goToHeroSlide = (index) => {
+    heroSlideIndex = index;
+    updateHeroSlider();
+    startHeroSlider();
+};
+
+function updateHeroSlider() {
+    const track = document.getElementById('slider-track');
+    const dots = document.querySelectorAll('#slider-dots .dot');
+    if(track) track.style.transform = `translateX(-${heroSlideIndex * 100}%)`;
+    if(dots) dots.forEach((d, i) => d.classList.toggle('active', i === heroSlideIndex));
+}
+
+// ─── LUXE CLUB VIP PAYMENT ──────────────────────────────────────────────────
+window.joinLuxeClub = async () => {
+    if (!state.token) {
+        toast('Please login to join LUXE Premium Club', 'warning');
+        return navigate('login');
+    }
+    try {
+        const order = await api('/luxe-club/join', 'POST');
+        if (order.already_member) {
+            toast('You are already a Premium Member!', 'success');
+            return;
+        }
+        const options = {
+            key: state.razorpayKey || 'rzp_test_YourTestKey',
+            amount: order.amount,
+            currency: 'INR',
+            name: 'LUXE Fashion',
+            description: 'LUXE Club Premium Membership (1 Year)',
+            order_id: order.razorpay_order_id,
+            handler: async function (response) {
+                try {
+                    await api('/luxe-club/verify', 'POST', {
+                        razorpay_payment_id: response.razorpay_payment_id,
+                        razorpay_order_id: response.razorpay_order_id,
+                        razorpay_signature: response.razorpay_signature
+                    });
+                    toast('Welcome to LUXE Premium Club! 👑', 'success');
+                    fetchCounts();
+                } catch (e) {
+                    toast(e.message, 'error');
+                }
+            },
+            prefill: {
+                name: state.user?.name || '',
+                email: state.user?.email || '',
+                contact: state.user?.phone || ''
+            },
+            theme: { color: '#C9A84C' }
+        };
+        const rzp = new Razorpay(options);
+        rzp.on('payment.failed', function (res) {
+            toast('Payment failed: ' + res.error.description, 'error');
+        });
+        rzp.open();
+    } catch(e) { toast(e.message, 'error'); }
+};
 
 // ─── SHOP ──────────────────────────────────────────────────────────────────
 async function renderShop() {
@@ -539,11 +683,11 @@ async function renderProductDetail(slug) {
             <div class="product-detail">
                 <div class="detail-gallery">
                     <div class="main-img-container" style="overflow:hidden; position:relative; cursor:zoom-in; border-radius:var(--radius-lg)">
-                        <img src="${esc(p.image_url)}" alt="${esc(p.name)}" id="main-img" style="transition: transform 0.2s ease; width:100%; height:100%; object-fit:cover;" onmousemove="zoomImg(event)" onmouseleave="this.style.transform='scale(1)'">
+                        <img src="${esc(p.image_url||'https://images.unsplash.com/photo-1445205170230-053b83016050?w=600')}" onerror="this.src='https://images.unsplash.com/photo-1445205170230-053b83016050?w=600'" alt="${esc(p.name)}" id="main-img" style="transition: transform 0.2s ease; width:100%; height:100%; object-fit:cover;" onmousemove="zoomImg(event)" onmouseleave="this.style.transform='scale(1)'">
                     </div>
                     <div class="gallery-thumbnails" style="display:flex; gap:10px; margin-top:10px; overflow-x:auto; padding-bottom:5px;">
                         ${allImages.map((src, i) => `
-                            <img src="${esc(src)}" class="thumb ${i===0?'active':''}" onclick="setMainImg(this, '${esc(src)}')" style="width:80px;height:80px;object-fit:cover;cursor:pointer;border:2px solid ${i===0?'var(--accent)':'transparent'};border-radius:var(--radius-sm); transition:border 0.2s">
+                            <img src="${esc(src||'https://images.unsplash.com/photo-1445205170230-053b83016050?w=600')}" onerror="this.src='https://images.unsplash.com/photo-1445205170230-053b83016050?w=600'" class="thumb ${i===0?'active':''}" onclick="setMainImg(this, '${esc(src)}')" style="width:80px;height:80px;object-fit:cover;cursor:pointer;border:2px solid ${i===0?'var(--accent)':'transparent'};border-radius:var(--radius-sm); transition:border 0.2s">
                         `).join('')}
                     </div>
                 </div>
@@ -567,6 +711,7 @@ async function renderProductDetail(slug) {
                     <div class="detail-actions">
                         <button class="btn btn-primary btn-lg pulse" id="add-to-cart-btn" onclick="addToCartDetail(${p.id})"><i class="fas fa-shopping-bag"></i> Add to Cart</button>
                         <button class="btn btn-outline" onclick="addToWishlist(${p.id})"><i class="fas fa-heart"></i></button>
+                        ${isAdmin() ? `<button class="btn btn-outline" onclick="editProduct(${p.id})"><i class="fas fa-edit"></i> Edit Product</button>` : ''}
                     </div>
                     <div class="razorpay-badge"><i class="fas fa-lock"></i> Secure Checkout with Razorpay</div>
                     <div class="detail-meta mt-3">
@@ -667,44 +812,50 @@ async function renderProductDetail(slug) {
 
 // ─── Auth Views ────────────────────────────────────────────────────────────
 function renderLogin() {
-    app.innerHTML = `<div class="form-container" style="max-width: 420px; margin: 2rem auto; text-align: center;">
-        <h2 style="margin-bottom: 0.5rem;">Welcome to LUXE</h2>
-        <p class="text-muted" style="margin-bottom: 2rem;">Log in or sign up seamlessly</p>
-        
-        <div id="login-main" class="reveal">
-            <div id="otp-step-1">
-                <form id="send-otp-form">
-                    <div class="form-group" style="text-align: left;">
-                        <label>Mobile Number</label>
-                        <div style="display:flex;align-items:center;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);padding-left:1rem;">
-                            <span style="color:var(--text-secondary);">+91</span>
-                            <input type="tel" id="otp-mobile" required pattern="[0-9]{10}" placeholder="10-digit mobile" style="border:none;outline:none;box-shadow:none;width:100%;background:transparent;">
-                        </div>
+    app.innerHTML = `
+    <div class="login-wrapper">
+        <div class="login-image">
+            <div class="login-overlay">
+                <h1 class="gsap-fade">Welcome to LUXE</h1>
+                <p class="gsap-fade">Experience the epitome of modern luxury fashion. Seamlessly sign in to access your curated collections and premium benefits.</p>
+            </div>
+        </div>
+        <div class="login-form-container">
+            <div class="form-card reveal">
+                <h2 style="margin-bottom: 0.5rem;font-family:var(--font-heading)">Sign In</h2>
+                <p class="text-muted" style="margin-bottom: 2rem;">Log in or sign up securely</p>
+                
+                <div id="login-main">
+                    <div id="otp-step-1">
+                        <form id="send-otp-form">
+                            <div class="form-group" style="text-align: left;">
+                                <label>Mobile Number</label>
+                                <div class="input-with-icon">
+                                    <span class="prefix">+91</span>
+                                    <input type="tel" id="otp-mobile" required pattern="[0-9]{10}" placeholder="10-digit mobile">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-full btn-lg pulse-hover" id="send-otp-btn" style="margin-bottom: 1.5rem;"><i class="fas fa-mobile-alt"></i> Send OTP</button>
+                        </form>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-full btn-lg" id="send-otp-btn" style="margin-bottom: 1rem;"><i class="fas fa-mobile-alt"></i> Send OTP</button>
-                </form>
-            </div>
 
-            <div id="otp-step-2" style="display:none;">
-                <form id="verify-otp-form">
-                    <p style="font-size:0.9rem; margin-bottom:1rem; color:var(--text-secondary);">OTP sent to <strong id="display-mobile"></strong></p>
-                    <div class="form-group" style="text-align: left;">
-                        <label>Enter OTP</label>
-                        <input type="text" id="otp-code" required placeholder="4-digit code" pattern="[0-9]{4}">
+                    <div id="otp-step-2" style="display:none; animation:fadeIn 0.3s ease;">
+                        <form id="verify-otp-form">
+                            <p style="font-size:0.9rem; margin-bottom:1rem; color:var(--text-secondary);">OTP sent to <strong id="display-mobile"></strong></p>
+                            <div class="form-group" style="text-align: left;">
+                                <label>Enter OTP</label>
+                                <input type="text" id="otp-code" required placeholder="4-digit code" pattern="[0-9]{4}" style="letter-spacing:5px;text-align:center;font-size:1.5rem;font-weight:bold;">
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-full btn-lg pulse-hover" id="verify-otp-btn" style="margin-bottom: 1rem;"><i class="fas fa-check-circle"></i> Verify & Login</button>
+                            <a href="#" id="change-mobile-btn" style="font-size:0.85rem; color:var(--accent); display:inline-block; margin-bottom:1rem;">Change Mobile Number</a>
+                        </form>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-full btn-lg" id="verify-otp-btn" style="margin-bottom: 1rem;"><i class="fas fa-check-circle"></i> Verify & Login</button>
-                    <a href="#" id="change-mobile-btn" style="font-size:0.85rem; color:var(--accent);">Change Mobile Number</a>
-                </form>
-            </div>
 
-            <div style="margin: 1rem 0; text-align: center; position: relative;">
-                <hr style="border:0; border-top:1px solid var(--border); margin:0;">
-                <span style="position: absolute; top:-10px; left:50%; transform:translateX(-50%); background:var(--bg-card); padding:0 10px; font-size:0.85rem; color:var(--text-secondary);">OR LOGIN WITH PASSWORD</span>
-            </div>
+                    <div class="divider"><span>OR</span></div>
 
-            <form id="password-login-form">
-                <div class="form-group" style="text-align: left;">
-                    <label>Mobile Number or Email</label>
+                    <form id="password-login-form">
+                        <div class="form-group" style="text-align: left;">
+                            <label>Mobile Number or Email</label>
                     <input type="text" id="login-id" required placeholder="Enter mobile or email">
                 </div>
                 <div class="form-group" style="text-align: left;">
@@ -1233,15 +1384,104 @@ async function renderNotifications() { if(!state.token) return navigate('login')
 
 // ─── Contact / Blog ────────────────────────────────────────────────────────
 async function renderContact() {
+    let ticketsHtml = '';
+    if (state.token) {
+        try {
+            const tickets = await api('/support');
+            if (tickets.length > 0) {
+                ticketsHtml = `
+                    <div class="form-container mt-4">
+                        <h2>Your Support Tickets</h2>
+                        <div class="ticket-list">
+                            ${tickets.map(t => `
+                                <div class="order-card mb-2" style="cursor:pointer" onclick="viewTicket(${t.id})">
+                                    <div class="flex justify-between items-center">
+                                        <div>
+                                            <strong>#${t.id} - ${esc(t.subject)}</strong>
+                                            <p class="text-muted" style="margin:0;font-size:0.85rem">Status: <span class="status-${t.status}">${t.status}</span></p>
+                                        </div>
+                                        <i class="fas fa-chevron-right text-muted"></i>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        } catch(e) {}
+    }
+
     app.innerHTML = `<div class="container"><h1 class="mb-3">Get in Touch</h1>
         <div class="grid-2 mb-4"><div class="contact-info-card reveal"><i class="fas fa-envelope"></i><h3>Email</h3><p>support@luxe.com</p></div><div class="contact-info-card reveal"><i class="fab fa-whatsapp"></i><h3>WhatsApp</h3><p>+91 99999 99999</p></div></div>
-        <div class="form-container"><h2>Submit a Ticket</h2><form id="ticket-form">
-        <div class="form-group"><label>Subject</label><input id="t-sub" required></div>
-        <div class="form-group"><label>Message</label><textarea id="t-msg" rows="5" required></textarea></div>
-        <button type="submit" class="btn btn-primary btn-full">${state.token?'Submit Ticket':'Login to Submit'}</button></form></div></div>`;
+        <div class="grid-2">
+            <div class="form-container"><h2>Submit a Ticket</h2><form id="ticket-form">
+                <div class="form-group"><label>Subject</label><input id="t-sub" required></div>
+                <div class="form-group"><label>Message</label><textarea id="t-msg" rows="5" required></textarea></div>
+                <button type="submit" class="btn btn-primary btn-full">${state.token?'Submit Ticket':'Login to Submit'}</button>
+            </form></div>
+            <div>${ticketsHtml}</div>
+        </div>
+    </div>
+    <!-- Chat Modal -->
+    <div id="chat-modal" class="modal">
+        <div class="modal-content" style="max-width:500px; display:flex; flex-direction:column; height:80vh; padding:1.5rem">
+            <span class="close-modal" onclick="$('#chat-modal').style.display='none'"><i class="fas fa-times"></i></span>
+            <h2 id="chat-title" style="margin-bottom:1rem;font-size:1.2rem;border-bottom:1px solid var(--border);padding-bottom:1rem">Chat</h2>
+            <div id="chat-messages" style="flex:1; overflow-y:auto; padding:1rem; background:var(--bg); border-radius:var(--radius-sm); margin-bottom:1rem; display:flex; flex-direction:column; gap:1rem;">
+            </div>
+            <form id="chat-form" style="display:flex; gap:0.5rem">
+                <input type="text" id="chat-input" placeholder="Type a message..." required style="flex:1; padding:0.8rem; border-radius:var(--radius-full); border:1px solid var(--border)">
+                <button type="submit" class="btn btn-primary" style="border-radius:50%; width:44px; height:44px; padding:0; display:flex; align-items:center; justify-content:center"><i class="fas fa-paper-plane"></i></button>
+            </form>
+        </div>
+    </div>`;
     setTimeout(initScrollReveal, 100);
-    if(state.token) $('#ticket-form').addEventListener('submit',async(e)=>{e.preventDefault();try{await api('/support','POST',{subject:$('#t-sub').value,message:$('#t-msg').value});toast('Ticket submitted!','success');$('#ticket-form').reset();}catch(e){toast(e.message,'error');}});
+    if(state.token) {
+        $('#ticket-form').addEventListener('submit',async(e)=>{
+            e.preventDefault();
+            try{
+                await api('/support','POST',{subject:$('#t-sub').value,message:$('#t-msg').value});
+                toast('Ticket submitted!','success');
+                renderContact();
+            }catch(e){toast(e.message,'error');}
+        });
+    }
 }
+
+window.viewTicket = async (tid) => {
+    try {
+        const data = await api(`/support/${tid}/messages`);
+        $('#chat-title').textContent = `#${tid} - ${data.ticket.subject} (${data.ticket.status})`;
+        
+        const renderMsgs = (msgs) => msgs.map(m => {
+            const isMe = m.sender_type === 'user';
+            return `
+                <div style="align-self: ${isMe ? 'flex-end' : 'flex-start'}; max-width: 80%; background: ${isMe ? 'var(--accent)' : 'var(--bg-card)'}; color: ${isMe ? '#fff' : 'var(--text)'}; padding: 0.8rem 1rem; border-radius: 1rem; border-bottom-${isMe ? 'right' : 'left'}-radius: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border: 1px solid ${isMe ? 'transparent' : 'var(--border)'};">
+                    <div style="font-size:0.75rem; opacity:0.8; margin-bottom:0.25rem">${esc(m.sender_name)}</div>
+                    <div style="line-height:1.4">${esc(m.message)}</div>
+                    <div style="font-size:0.7rem; opacity:0.6; text-align:right; margin-top:0.25rem">${new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
+                </div>
+            `;
+        }).join('');
+        
+        $('#chat-messages').innerHTML = renderMsgs(data.messages);
+        $('#chat-modal').style.display = 'flex';
+        $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
+
+        $('#chat-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const msg = $('#chat-input').value;
+            if(!msg) return;
+            try {
+                await api(`/support/${tid}/messages`, 'POST', { message: msg });
+                $('#chat-input').value = '';
+                const newData = await api(`/support/${tid}/messages`);
+                $('#chat-messages').innerHTML = renderMsgs(newData.messages);
+                $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
+            } catch(e) { toast(e.message, 'error'); }
+        };
+    } catch(e) { toast(e.message, 'error'); }
+};
 
 async function renderBlog() { try { const posts = await api('/blog');
     app.innerHTML = `<div class="container"><div class="section-title"><h2>The LUXE Journal</h2><p>Fashion insights and style guides</p><div class="line"></div></div>
@@ -1299,7 +1539,12 @@ async function renderAdmin(tab = 'dashboard') {
                     <td>₹${o.total.toLocaleString()}</td>
                     <td>${o.payment_method==='ONLINE'?'<span style="color:var(--success)"><i class="fas fa-check-circle"></i> Online</span>':'COD'}</td>
                     <td><span class="order-status status-${o.status}">${o.status.replace(/_/g,' ')}</span></td><td>${new Date(o.created_at).toLocaleDateString()}</td>
-                    <td><select onchange="updateOrderStatus(${o.id},this.value)" style="padding:4px;border-radius:4px;border:1px solid var(--border)"><option value="">Update</option>${['CONFIRMED','PACKED','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED'].map(s=>`<option value="${s}">${s.replace(/_/g,' ')}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table>`;
+                    <td>
+                        <div class="flex gap-1">
+                            <button class="btn btn-sm btn-outline" onclick="navigate('order/${o.order_number}')"><i class="fas fa-eye"></i></button>
+                            <select onchange="updateOrderStatus(${o.id},this.value)" style="padding:4px;border-radius:4px;border:1px solid var(--border)"><option value="">Update</option>${['CONFIRMED','PACKED','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED'].map(s=>`<option value="${s}">${s.replace(/_/g,' ')}</option>`).join('')}</select>
+                        </div>
+                    </td></tr>`).join('')}</tbody></table>`;
         } else if (tab === 'products') {
             const products = await api('/admin/products');
             content.innerHTML = `<div class="flex justify-between items-center mb-3"><h1>Products (${products.length})</h1><button class="btn btn-accent" onclick="showAddProduct()"><i class="fas fa-plus"></i> Add Product</button></div>
@@ -1322,8 +1567,12 @@ async function renderAdmin(tab = 'dashboard') {
                 <div class="flex gap-1">${!r.is_approved?`<button class="btn btn-sm btn-accent" onclick="approveReview(${r.id})">Approve</button>`:''}<button class="btn btn-sm btn-danger" onclick="deleteReview(${r.id})">Delete</button></div></div></div>`).join('')}`;
         } else if (tab === 'coupons') {
             const coupons = await api('/admin/coupons');
-            content.innerHTML = `<h1 class="mb-3">Coupons</h1>
-                <table class="data-table"><thead><tr><th>Code</th><th>Type</th><th>Value</th><th>Min Order</th><th>Used</th><th>Limit</th></tr></thead><tbody>${coupons.map(c=>`<tr><td><strong>${esc(c.code)}</strong></td><td>${c.discount_type}</td><td>${c.discount_type==='percentage'?c.discount_value+'%':'₹'+c.discount_value}</td><td>₹${c.min_order}</td><td>${c.used_count}</td><td>${c.usage_limit}</td></tr>`).join('')}</tbody></table>`;
+            content.innerHTML = `<div class="flex justify-between items-center mb-3"><h1>Coupons (${coupons.length})</h1><button class="btn btn-accent" onclick="showAddCoupon()"><i class="fas fa-plus"></i> Add Coupon</button></div>
+                <div id="admin-coupon-form"></div>
+                <table class="data-table"><thead><tr><th>Code</th><th>Type</th><th>Value</th><th>Min Order</th><th>Used</th><th>Limit</th><th>Action</th></tr></thead><tbody>${coupons.map(c=>`<tr>
+                    <td><strong>${esc(c.code)}</strong></td><td>${c.discount_type}</td><td>${c.discount_type==='percentage'?c.discount_value+'%':'₹'+c.discount_value}</td><td>₹${c.min_order}</td><td>${c.used_count}</td><td>${c.usage_limit}</td>
+                    <td><div class="flex gap-1"><button class="btn btn-sm btn-danger" onclick="deleteCoupon(${c.id})"><i class="fas fa-trash"></i></button></div></td>
+                </tr>`).join('')}</tbody></table>`;
         } else if (tab === 'inventory') {
             const inv = await api('/admin/inventory');
             content.innerHTML = `<h1 class="mb-3">Inventory</h1>
@@ -1404,13 +1653,121 @@ window.saveSiteSettings = async (e) => {
     } catch(err) { toast(err.message, 'error'); btn.innerHTML = 'Save Changes'; }
 };
 
+window.showAddCoupon = () => {
+    $('#admin-coupon-form').innerHTML = `
+        <div class="form-container" style="max-width:100%; margin-top:0; margin-bottom:2rem;">
+            <h3>Add New Coupon</h3>
+            <form onsubmit="saveCoupon(event)">
+                <div class="form-row">
+                    <div class="form-group"><label>Code</label><input type="text" id="c_code" required></div>
+                    <div class="form-group"><label>Discount Type</label>
+                        <select id="c_type" required><option value="percentage">Percentage (%)</option><option value="fixed">Fixed Amount (₹)</option></select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Discount Value</label><input type="number" id="c_value" required min="1"></div>
+                    <div class="form-group"><label>Min Order Value</label><input type="number" id="c_min" value="0"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Max Discount</label><input type="number" id="c_max" value="0"></div>
+                    <div class="form-group"><label>Usage Limit</label><input type="number" id="c_limit" value="100"></div>
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" class="btn btn-primary">Save Coupon</button>
+                    <button type="button" class="btn btn-ghost" onclick="$('#admin-coupon-form').innerHTML=''">Cancel</button>
+                </div>
+            </form>
+        </div>
+    `;
+};
+
+window.saveCoupon = async (e) => {
+    e.preventDefault();
+    const payload = {
+        code: $('#c_code').value.toUpperCase(),
+        discount_type: $('#c_type').value,
+        discount_value: parseFloat($('#c_value').value),
+        min_order: parseFloat($('#c_min').value) || 0,
+        max_discount: parseFloat($('#c_max').value) || 0,
+        usage_limit: parseInt($('#c_limit').value) || 100
+    };
+    try {
+        await api('/admin/coupons', 'POST', payload);
+        toast('Coupon added successfully!', 'success');
+        renderAdmin('coupons');
+    } catch(err) { toast(err.message, 'error'); }
+};
+
+window.deleteCoupon = async (id) => {
+    if(!confirm('Are you sure you want to delete this coupon?')) return;
+    try {
+        await api('/admin/coupons/' + id, 'DELETE');
+        toast('Coupon deleted', 'info');
+        renderAdmin('coupons');
+    } catch(err) { toast(err.message, 'error'); }
+};
+
 window.deleteProduct = async (id) => {
     if(!confirm('Are you sure you want to delete this product?')) return;
     try { await api(`/admin/products/${id}`, 'DELETE'); toast('Product deleted', 'success'); renderAdmin('products'); } catch(e) { toast(e.message, 'error'); }
 };
 
 window.editProduct = async (id) => {
-    toast('Editing products will be supported in the next update!', 'info');
+    try {
+        const [cats, p] = await Promise.all([api('/categories'), api(`/products/${id}?id_lookup=1`)]); // Need to use product id, but our endpoint is by slug.
+        // Wait, the API supports by slug, let's fetch from admin/products
+        const adminProducts = await api('/admin/products');
+        const prod = adminProducts.find(x => x.id === id);
+        if(!prod) throw new Error('Product not found');
+
+        let modal = $('#edit-product-modal');
+        if(!modal) {
+            modal = document.createElement('div');
+            modal.id = 'edit-product-modal';
+            modal.className = 'modal';
+            document.body.appendChild(modal);
+        }
+        
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width:600px; padding:2rem;">
+                <span class="close-modal" onclick="document.getElementById('edit-product-modal').style.display='none'"><i class="fas fa-times"></i></span>
+                <h2 style="margin-bottom:1.5rem">Edit Product</h2>
+                <form id="edit-prod-form" onsubmit="saveProductEdit(event, ${id})">
+                    <div class="form-row"><div class="form-group"><label>Name</label><input id="ep-name" value="${esc(prod.name)}" required></div><div class="form-group"><label>Brand</label><input id="ep-brand" value="${esc(prod.brand||'')}"></div></div>
+                    <div class="form-row"><div class="form-group"><label>Category</label><select id="ep-cat" required>${cats.map(c=>`<option value="${c.id}" ${c.id===prod.category_id?'selected':''}>${c.name}</option>`).join('')}</select></div><div class="form-group"><label>SKU</label><input id="ep-sku" value="${esc(prod.sku||'')}"></div></div>
+                    <div class="form-row"><div class="form-group"><label>Base Price</label><input type="number" id="ep-price" value="${prod.base_price}" required></div><div class="form-group"><label>Sale Price</label><input type="number" id="ep-sale" value="${prod.sale_price||''}"></div></div>
+                    <div class="form-group"><label>Description</label><textarea id="ep-desc" rows="3">${esc(prod.description||'')}</textarea></div>
+                    <div class="form-group"><label>Image URL</label><input id="ep-img" value="${esc(prod.image_url||'')}" placeholder="https://..."></div>
+                    <div class="form-row"><div class="form-group"><label>Fabric</label><input id="ep-fabric" value="${esc(prod.fabric||'')}"></div><div class="form-group"><label>Material</label><input id="ep-material" value="${esc(prod.material||'')}"></div></div>
+                    <div class="form-group">
+                        <label style="display:flex;align-items:center;gap:0.5rem">
+                            <input type="checkbox" id="ep-active" ${prod.is_active?'checked':''} style="width:auto"> Is Active
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-accent btn-full">Save Changes</button>
+                </form>
+            </div>
+        `;
+        modal.style.display = 'flex';
+    } catch(e) { toast(e.message, 'error'); }
+};
+
+window.saveProductEdit = async (e, id) => {
+    e.preventDefault();
+    const payload = {
+        name: $('#ep-name').value, brand: $('#ep-brand').value, category_id: parseInt($('#ep-cat').value),
+        sku: $('#ep-sku').value, base_price: parseFloat($('#ep-price').value),
+        sale_price: parseFloat($('#ep-sale').value) || null, description: $('#ep-desc').value,
+        image_url: $('#ep-img').value, fabric: $('#ep-fabric').value, material: $('#ep-material').value,
+        is_active: $('#ep-active').checked
+    };
+    try {
+        await api(`/admin/products/${id}`, 'PUT', payload);
+        toast('Product updated!', 'success');
+        $('#edit-product-modal').style.display = 'none';
+        if (location.hash.startsWith('#admin-products')) renderAdmin('products');
+        else if (location.hash.startsWith('#product/')) location.reload();
+    } catch(err) { toast(err.message, 'error'); }
 };
 
 window.updateOrderStatus = async(oid,status)=>{if(!status)return;try{await api(`/admin/orders/${oid}/status`,'PUT',{status});toast('Status updated','success');renderAdmin('orders');}catch(e){toast(e.message,'error');}};
@@ -1466,8 +1823,51 @@ window.openMediaModal = (url, isVideo) => {
     $('#media-modal').style.display = 'flex';
 };
 window.closeMediaModal = () => { $('#media-modal').style.display = 'none'; $('#media-container').innerHTML = ''; };
-window.openReturnModal = (oid) => { $('#return-order-id').value = oid; $('#return-modal').style.display = 'flex'; };
-window.closeReturnModal = () => { $('#return-modal').style.display = 'none'; $('#return-form').reset(); };
+window.openReturnModal = (oid) => { 
+    if(oid) $('#return-order-id').value = oid; 
+    $('#return-modal').style.display = 'flex'; 
+};
+window.closeReturnModal = () => { $('#return-modal').style.display = 'none'; if($('#return-form')) $('#return-form').reset(); };
+
+window.openTrackModal = () => {
+    $('#track-modal').style.display = 'flex';
+};
+window.closeTrackModal = () => {
+    $('#track-modal').style.display = 'none';
+    if($('#track-form')) $('#track-form').reset();
+    $('#track-result').style.display = 'none';
+};
+
+window.trackOrder = async () => {
+    const orderNum = $('#track-order-num').value.trim();
+    if (!orderNum) return;
+    try {
+        const tracking = await api(`/orders/${orderNum}/tracking`);
+        if (!tracking || tracking.length === 0) {
+            $('#track-result').innerHTML = `<p class="text-danger">No tracking information found or order doesn't exist.</p>`;
+        } else {
+            $('#track-result').innerHTML = `
+                <div class="timeline">
+                    ${tracking.map(t => `
+                        <div class="timeline-item">
+                            <div class="timeline-marker"></div>
+                            <div class="timeline-content">
+                                <h4>${esc(t.status)}</h4>
+                                <p>${esc(t.location || 'Update')}</p>
+                                <small>${new Date(t.created_at).toLocaleString()}</small>
+                                ${t.description ? `<p class="text-muted mt-1">${esc(t.description)}</p>` : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+        $('#track-result').style.display = 'block';
+    } catch (e) {
+        $('#track-result').innerHTML = `<p class="text-danger">${esc(e.message)}</p>`;
+        $('#track-result').style.display = 'block';
+    }
+};
 
 if($('#return-form')) {
     $('#return-form').addEventListener('submit', async(e) => {

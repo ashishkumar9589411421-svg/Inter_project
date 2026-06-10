@@ -119,9 +119,9 @@
             <div class="footer-col">
                 <h3>Help</h3>
                 <a href="#contact">Contact Us</a>
-                <a href="#faq">FAQs</a>
-                <a href="#faq">Shipping</a>
-                <a href="#refund">Returns & Refunds</a>
+                <a href="#faq">FAQs & Shipping</a>
+                <a href="#" onclick="event.preventDefault();openTrackModal()">Track Order</a>
+                <a href="#" onclick="event.preventDefault();openReturnModal()">Request Return</a>
             </div>
             <div class="footer-col">
                 <h3>Company</h3>
@@ -138,6 +138,21 @@
     </footer>
 
     <!-- Modals -->
+    <!-- Tracking Modal -->
+    <div id="track-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeTrackModal()"><i class="fas fa-times"></i></span>
+            <h2>Track Your Order</h2>
+            <form id="track-form" onsubmit="event.preventDefault();trackOrder()">
+                <div class="form-group">
+                    <label>Order Number (e.g. LUXE...)</label>
+                    <input type="text" id="track-order-num" required placeholder="Enter your order number">
+                </div>
+                <button type="submit" class="btn btn-primary">Track Order</button>
+            </form>
+            <div id="track-result" style="margin-top:1.5rem;display:none;"></div>
+        </div>
+    </div>
     <div id="media-modal" class="modal media-modal">
         <div class="modal-content media-modal-content">
             <span class="close-modal" onclick="closeMediaModal()"><i class="fas fa-times"></i></span>
