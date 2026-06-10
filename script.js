@@ -400,16 +400,16 @@ async function renderHome() {
                 let trackHtml = '';
                 let dotsHtml = '';
                 banners.forEach((b, i) => {
-                    trackHtml += \`
+                    trackHtml += `
                     <div class="slide">
-                        <div class="slide-bg" style="background-image:url('\${esc(b.image_url)}')"></div>
+                        <div class="slide-bg" style="background-image:url('${esc(b.image_url)}')"></div>
                         <div class="slide-content">
-                            \${b.title ? \`<h1 class="slide-title">\${esc(b.title)}</h1>\` : ''}
-                            \${b.subtitle ? \`<p class="slide-subtitle">\${esc(b.subtitle)}</p>\` : ''}
-                            \${b.link_url ? \`<a href="\${esc(b.link_url)}" class="btn btn-primary btn-lg">\${esc(b.button_text || 'Shop Now')}</a>\` : ''}
+                            ${b.title ? `<h1 class="slide-title">${esc(b.title)}</h1>` : ''}
+                            ${b.subtitle ? `<p class="slide-subtitle">${esc(b.subtitle)}</p>` : ''}
+                            ${b.link_url ? `<a href="${esc(b.link_url)}" class="btn btn-primary btn-lg">${esc(b.button_text || 'Shop Now')}</a>` : ''}
                         </div>
-                    </div>\`;
-                    dotsHtml += \`<div class="dot \${i===0?'active':''}" onclick="goToHeroSlide(\${i})"></div>\`;
+                    </div>`;
+                    dotsHtml += `<div class="dot ${i===0?'active':''}" onclick="goToHeroSlide(${i})"></div>`;
                 });
                 $('#slider-track').innerHTML = trackHtml;
                 $('#slider-dots').innerHTML = dotsHtml;
