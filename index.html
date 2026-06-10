@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LUXE | Luxury Fashion Marketplace</title>
+    <meta name="description" content="LUXE - Premium luxury fashion marketplace. Shop oversized t-shirts, kurtis, Korean tops, jeans, dresses, co-ord sets and more.">
+    <meta name="keywords" content="luxury fashion, oversized t-shirts, kurtis, korean tops, jeans, dresses, online shopping">
+    <meta name="author" content="LUXE Fashion">
+    <meta name="robots" content="index, follow">
+    <!-- Open Graph -->
+    <meta property="og:title" content="LUXE | Luxury Fashion Marketplace">
+    <meta property="og:description" content="Discover premium luxury fashion collections at LUXE.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://images.unsplash.com/photo-1445205170230-053b83016050?w=1200&q=80">
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Jost:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="/style.css">
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"WebSite","name":"LUXE","url":"https://luxe.com","description":"Premium luxury fashion marketplace",
+    "potentialAction": {"@type": "SearchAction","target": "https://luxe.com/#shop?q={search_term_string}","query-input": "required name=search_term_string"}}
+    </script>
+    <!-- CSRF Token Placeholder -->
+    <meta name="csrf-token" content="">
+</head>
+<body>
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+    <!-- Back to Top -->
+    <button class="back-to-top" id="back-to-top" aria-label="Back to top"><i class="fas fa-arrow-up"></i></button>
+
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="nav-container">
+            <a href="#home" class="logo brand-name-display">LUXE</a>
+            <button class="hamburger" id="hamburger" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+            <ul class="nav-links" id="nav-links">
+                <li><a href="#home" data-nav>Home</a></li>
+                <li><a href="#shop" data-nav>Shop</a></li>
+                <li><a href="#blog" data-nav>Blog</a></li>
+                <li><a href="#contact" data-nav>Contact</a></li>
+                <li><a href="#dashboard" class="auth-only" data-nav>Dashboard</a></li>
+                <li><a href="#admin" class="admin-only" data-nav>Admin</a></li>
+            </ul>
+            <div class="smart-search-wrapper">
+                <div class="search-bar">
+                    <input type="text" id="smart-search" placeholder="Search products, categories..." autocomplete="off">
+                    <i class="fas fa-search search-icon"></i>
+                </div>
+                <div class="search-suggestions" id="search-suggestions"></div>
+            </div>
+            <div class="nav-actions">
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <a href="#wishlist" class="nav-icon auth-only" title="Wishlist">
+                    <i class="fas fa-heart"></i>
+                    <span class="badge" id="wishlist-count">0</span>
+                </a>
+                <a href="#cart" class="nav-icon" title="Cart">
+                    <i class="fas fa-shopping-bag"></i>
+                    <span class="badge" id="cart-count">0</span>
+                </a>
+                <a href="#notifications" class="nav-icon auth-only" title="Notifications">
+                    <i class="fas fa-bell"></i>
+                    <span class="badge" id="notif-count">0</span>
+                </a>
+                <a href="#login" class="nav-icon guest-only" title="Login">
+                    <i class="fas fa-user"></i>
+                </a>
+                <div class="user-menu auth-only" id="user-menu">
+                    <button class="user-avatar" id="user-avatar-btn">
+                        <i class="fas fa-user-circle"></i>
+                    </button>
+                    <div class="user-dropdown" id="user-dropdown">
+                        <span class="dropdown-name" id="dropdown-name"></span>
+                        <a href="#dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                        <a href="#orders"><i class="fas fa-box"></i> My Orders</a>
+                        <a href="#profile"><i class="fas fa-user-edit"></i> Profile</a>
+                        <a href="#wallet"><i class="fas fa-wallet"></i> Wallet</a>
+                        <a href="#" id="logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- SPA Container -->
+    <main id="app" role="main"></main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-grid">
+            <div class="footer-brand">
+                <h2 class="footer-logo brand-name-display">LUXE</h2>
+                <p>The epitome of modern luxury fashion. Curated collections for the discerning individual.</p>
+                <div class="social-links">
+                    <a href="#" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+                    <a href="#" aria-label="Facebook"><i class="fab fa-facebook"></i></a>
+                    <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
+                    <a href="#" aria-label="Pinterest"><i class="fab fa-pinterest"></i></a>
+                </div>
+            </div>
+            <div class="footer-col">
+                <h3>Shop</h3>
+                <a href="#shop">New Arrivals</a>
+                <a href="#shop">Trending</a>
+                <a href="#shop">Best Sellers</a>
+                <a href="#shop">Sale</a>
+            </div>
+            <div class="footer-col">
+                <h3>Help</h3>
+                <a href="#contact">Contact Us</a>
+                <a href="#faq">FAQs</a>
+                <a href="#faq">Shipping</a>
+                <a href="#refund">Returns & Refunds</a>
+            </div>
+            <div class="footer-col">
+                <h3>Company</h3>
+                <a href="#blog">Blog</a>
+                <a href="#about">About Us</a>
+                <a href="#">Careers</a>
+                <a href="#privacy">Privacy Policy</a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2026 <span class="brand-name-display">LUXE</span>. All rights reserved. | Made with <i class="fas fa-heart" style="color:var(--accent)"></i> in India</p>
+            <p id="developer-credit" style="display:none; font-size:0.8rem; margin-top:5px; color:var(--text-secondary);"></p>
+        </div>
+    </footer>
+
+    <!-- Modals -->
+    <div id="media-modal" class="modal media-modal">
+        <div class="modal-content media-modal-content">
+            <span class="close-modal" onclick="closeMediaModal()"><i class="fas fa-times"></i></span>
+            <div id="media-container"></div>
+        </div>
+    </div>
+    
+    <div id="return-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeReturnModal()"><i class="fas fa-times"></i></span>
+            <h2>Request Return</h2>
+            <form id="return-form">
+                <input type="hidden" id="return-order-id">
+                <div class="form-group">
+                    <label>Reason for Return</label>
+                    <select id="return-reason" required>
+                        <option value="">Select Reason</option>
+                        <option value="Damaged Product">Damaged Product</option>
+                        <option value="Wrong Item Received">Wrong Item Received</option>
+                        <option value="Size Issue">Size Issue</option>
+                        <option value="Not Needed Anymore">Not Needed Anymore</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Submit Request</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script type="text/javascript">
+        var configuration = {
+            widgetId: "36666a654d75383938383732",
+            tokenAuth: "524795T2XJZoxoYCQA6a28f8f9P1",
+            identifier: "",
+            exposeMethods: "true",
+            success: (data) => {
+                console.log('success response', data);
+                if(window.onMsg91Success) window.onMsg91Success(data);
+            },
+            failure: (error) => {
+                console.log('failure reason', error);
+                if(window.toast) toast('OTP Verification Failed', 'error');
+            }
+        };
+        (function loadOtpScript(urls) {
+            let i = 0;
+            function attempt() {
+                const s = document.createElement('script');
+                s.src = urls[i];
+                s.async = true;
+                s.onload = () => {
+                    if (typeof window.initSendOTP === 'function') {
+                        // initSendOTP is available now!
+                    }
+                };
+                s.onerror = () => {
+                    i++;
+                    if (i < urls.length) {
+                        attempt();
+                    }
+                };
+                document.head.appendChild(s);
+            }
+            attempt();
+        })([
+            'https://verify.msg91.com/otp-provider.js',
+            'https://verify.phone91.com/otp-provider.js'
+        ]);
+    </script>
+    <script src="/script.js"></script>
+</body>
+</html>
