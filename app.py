@@ -937,9 +937,7 @@ def admin_login():
     username = d.get('username','')
     password = d.get('password','')
     db = get_db()
-    user = db.execute("SELECT * FROM users WHERE name=? AND role='admin' AND is_active=1", (username,)).fetchone()
-    if not user:
-        user = db.execute("SELECT * FROM users WHERE mobile_number=? AND role='admin' AND is_active=1", (username,)).fetchone()
+    user = db.execute("SELECT * FROM users WHERE (name=? OR email=? OR mobile_number=?) AND role='admin' AND is_active=1", (username, username, username)).fetchone()
     if not user or not check_password(password, user['password_hash']):
         return jsonify({'error': 'Invalid admin credentials'}), 401
     token = create_token(user['id'], 'admin')
@@ -1022,15 +1020,16 @@ def get_products():
     if q.get('min_rating'):
         query += " AND (SELECT AVG(rating) FROM reviews r WHERE r.product_id = p.id AND r.is_approved=1) >= ?"; params.append(float(q['min_rating']))
     sort = q.get('sort','newest')
-    if sort == 'price_low': query += " ORDER BY COALESCE(p.sale_price,p.base_price) ASC"
-    elif sort == 'price_high': query += " ORDER BY COALESCE(p.sale_price,p.base_price) DESC"
-    elif sort == 'popular': query += " ORDER BY p.is_featured DESC, p.id DESC"
-    else: query += " ORDER BY p.created_at DESC"
+    order_clause = ""
+    if sort == 'price_low': order_clause = " ORDER BY COALESCE(p.sale_price,p.base_price) ASC"
+    elif sort == 'price_high': order_clause = " ORDER BY COALESCE(p.sale_price,p.base_price) DESC"
+    elif sort == 'popular': order_clause = " ORDER BY p.is_featured DESC, p.id DESC"
+    else: order_clause = " ORDER BY p.created_at DESC"
     page = int(q.get('page', 1)); per_page = int(q.get('per_page', 20))
     offset = (page - 1) * per_page
     count_q = query.replace("SELECT p.*, c.name as category_name", "SELECT COUNT(*) as total", 1)
     total = db.execute(count_q, params).fetchone()['total']
-    query += " LIMIT ? OFFSET ?"; params += [per_page, offset]
+    query += order_clause + " LIMIT ? OFFSET ?"; params += [per_page, offset]
     products = dict_rows(db.execute(query, params).fetchall())
     for p in products:
         avg = db.execute("SELECT AVG(rating) as avg_rating, COUNT(*) as count FROM reviews WHERE product_id=? AND is_approved=1", (p['id'],)).fetchone()
@@ -1912,9 +1911,10 @@ def admin_analytics(admin):
     low_stock = db.execute("SELECT COUNT(*) as v FROM product_variants WHERE stock < 5").fetchone()['v']
     pending_orders = db.execute("SELECT COUNT(*) as v FROM orders WHERE status='PENDING'").fetchone()['v']
     
-    chart = dict_rows(db.execute("""SELECT date(created_at) as date, SUM(total) as revenue 
-        FROM orders WHERE status NOT IN ('CANCELLED') AND created_at >= date('now', '-7 days')
-        GROUP BY date(created_at) ORDER BY date""").fetchall())
+    seven_days_ago = (datetime.date.today() - datetime.timedelta(days=7)).isoformat()
+    chart = dict_rows(db.execute("""SELECT DATE(created_at) as date, SUM(total) as revenue 
+        FROM orders WHERE status NOT IN ('CANCELLED') AND created_at >= ?
+        GROUP BY DATE(created_at) ORDER BY date""", (seven_days_ago,)).fetchall())
         
     top_products = dict_rows(db.execute("""SELECT p.name, sum(oi.quantity) as sold, sum(oi.price*oi.quantity) as revenue
         FROM order_items oi JOIN products p ON oi.product_id=p.id
