@@ -11,6 +11,70 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 
+try:
+    import psycopg2
+    from psycopg2.extras import DictCursor
+except ImportError:
+    psycopg2 = None
+
+class PostgresCursorWrapper:
+    def __init__(self, cursor):
+        self.cursor = cursor
+        self.lastrowid = None
+        self.description = None
+    
+    def execute(self, query, params=()):
+        is_insert = query.strip().upper().startswith("INSERT")
+        pg_query = query.replace('?', '%s')
+        if is_insert and "RETURNING " not in pg_query.upper():
+            pg_query = pg_query.rstrip(" ;") + " RETURNING id"
+        try:
+            self.cursor.execute(pg_query, params)
+        except Exception as e:
+            app.logger.error(f"DB Error: {e} | Query: {pg_query}")
+            raise e
+        self.description = self.cursor.description
+        if is_insert:
+            try:
+                res = self.cursor.fetchone()
+                if res:
+                    self.lastrowid = res['id']
+            except: pass
+        return self
+
+    def executemany(self, query, params_list):
+        pg_query = query.replace('?', '%s')
+        try:
+            self.cursor.executemany(pg_query, params_list)
+        except Exception as e:
+            app.logger.error(f"DB Error: {e} | Query: {pg_query}")
+            raise e
+        self.description = self.cursor.description
+        return self
+        
+    def fetchone(self): return self.cursor.fetchone()
+    def fetchall(self): return self.cursor.fetchall()
+    def fetchmany(self, size): return self.cursor.fetchmany(size)
+
+class PostgresConnectionWrapper:
+    def __init__(self, conn):
+        self.conn = conn
+    
+    def execute(self, query, params=()):
+        cursor = self.cursor()
+        return cursor.execute(query, params)
+        
+    def executescript(self, script):
+        self.cursor().cursor.execute(script)
+        self.conn.commit()
+        
+    def cursor(self):
+        return PostgresCursorWrapper(self.conn.cursor(cursor_factory=DictCursor))
+        
+    def commit(self): self.conn.commit()
+    def rollback(self): self.conn.rollback()
+    def close(self): self.conn.close()
+
 # Enable detailed logging
 logging.basicConfig(level=logging.DEBUG)
 
@@ -46,11 +110,16 @@ limiter = Limiter(get_remote_address, app=app, default_limits=["200 per minute"]
 # ─── DB Helpers ──────────────────────────────────────────────────────────────
 def get_db():
     if 'db' not in g:
-        g.db = sqlite3.connect(app.config['DATABASE'])
-        g.db.row_factory = sqlite3.Row
-        # SQL trace callback disabled for production
-        g.db.execute("PRAGMA journal_mode=WAL")
-        g.db.execute("PRAGMA foreign_keys=ON")
+        db_url = app.config['DATABASE']
+        if db_url.startswith('postgres'):
+            if psycopg2 is None: raise Exception("psycopg2 is not installed!")
+            conn = psycopg2.connect(db_url)
+            g.db = PostgresConnectionWrapper(conn)
+        else:
+            g.db = sqlite3.connect(db_url)
+            g.db.row_factory = sqlite3.Row
+            g.db.execute("PRAGMA journal_mode=WAL")
+            g.db.execute("PRAGMA foreign_keys=ON")
     return g.db
 
 @app.teardown_appcontext
@@ -420,14 +489,28 @@ def slugify(text):
     return re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')
 
 def init_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.executescript(SCHEMA)
-    cur = conn.cursor()
+    db_url = app.config['DATABASE']
+    if db_url.startswith('postgres'):
+        if psycopg2 is None: raise Exception("psycopg2 is not installed!")
+        conn = psycopg2.connect(db_url)
+        db = PostgresConnectionWrapper(conn)
+        # PostgreSQL doesn't use AUTOINCREMENT
+        script = SCHEMA.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+        db.executescript(script)
+        cur = db.cursor()
+        cur.execute("SELECT id FROM users WHERE role='admin'")
+    else:
+        conn = sqlite3.connect(db_url)
+        conn.executescript(SCHEMA)
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM users WHERE role='admin'")
+        db = conn
+        
     # Seed admin
-    cur.execute("SELECT id FROM users WHERE role='admin'")
     if not cur.fetchone():
         admin_pw = os.environ.get('ADMIN_PASSWORD', 'admin123')
         pw = bcrypt.hashpw(admin_pw.encode(), bcrypt.gensalt()).decode()
+        
         cur.execute("INSERT INTO users (mobile_number,email,password_hash,name,role) VALUES (?,?,?,?,?)",
                     ('9999999999','ashishadmin', pw, 'Ashish Admin', 'admin'))
         admin_id = cur.lastrowid
@@ -438,6 +521,7 @@ def init_db():
 
     # Seed settings
     cur.execute("SELECT COUNT(*) FROM settings")
+        
     if cur.fetchone()[0] == 0:
         default_settings = [
             ('brand_name', 'LUXE'),
@@ -448,7 +532,10 @@ def init_db():
             ('developer_portfolio', 'https://ashishkumar9589411421-svg.github.io/portfolio_v27-11-25/'),
             ('show_developer_credit', '1')
         ]
-        cur.executemany("INSERT INTO settings (key, value) VALUES (?, ?)", default_settings)
+        for k, v in default_settings:
+            cur.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (k, v))
+                
+    db.commit()
 
     # Seed categories
     cur.execute("SELECT COUNT(*) FROM categories")
@@ -1976,7 +2063,12 @@ def server_error(e):
     return jsonify({'error': 'Internal server error'}), 500
 
 # ─── Run ─────────────────────────────────────────────────────────────────────
+with app.app_context():
+    try:
+        init_db()
+    except Exception as e:
+        app.logger.error(f"Error initializing DB: {e}")
+
 if __name__ == '__main__':
-    init_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=os.environ.get('FLASK_DEBUG','1')=='1', host='0.0.0.0', port=port)
