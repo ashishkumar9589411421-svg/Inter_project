@@ -602,15 +602,18 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 
 @app.route('/')
 def serve_index():
-    return send_file(os.path.join(BASE, 'index.html'))
+    with open(os.path.join(BASE, 'index.html'), 'r', encoding='utf-8') as f:
+        return f.read(), 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 @app.route('/style.css')
 def serve_css():
-    return send_file(os.path.join(BASE, 'style.css'), mimetype='text/css')
+    with open(os.path.join(BASE, 'style.css'), 'r', encoding='utf-8') as f:
+        return f.read(), 200, {'Content-Type': 'text/css; charset=utf-8'}
 
 @app.route('/script.js')
 def serve_js():
-    return send_file(os.path.join(BASE, 'script.js'), mimetype='application/javascript')
+    with open(os.path.join(BASE, 'script.js'), 'r', encoding='utf-8') as f:
+        return f.read(), 200, {'Content-Type': 'application/javascript; charset=utf-8'}
 
 # ─── AUTH APIS ───────────────────────────────────────────────────────────────
 
